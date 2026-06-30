@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: homepage-stock
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app -b 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: LIXINGER_TOKEN
+        sync: false
+      - key: HOST
+        value: 0.0.0.0
+      - key: PYTHON_VERSION
+        value: 3.11.0
