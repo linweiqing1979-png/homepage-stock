@@ -8,97 +8,39 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 
 SKILL_ROOT = Path('/opt/homebrew/lib/node_modules/stock-analyzer-skill/scripts')
 
-# Load stock database
-def load_stocks():
+# Load complete stock database (5300+ names)
+_stock_names_file = Path(__file__).parent / 'stock_names.json'
+if _stock_names_file.exists():
+    with open(_stock_names_file) as f:
+        STOCK_NAMES = json.load(f)
+    print(f'已加载 {len(STOCK_NAMES)} 只股票名称（完整版）')
+else:
+    STOCK_NAMES = {}
+    print('⚠️ stock_names.json 未找到，搜索将受限')
+
+# Full code list for code searches
+def load_all_codes():
     with open(SKILL_ROOT / 'data' / 'all_stocks.json') as f:
         data = json.load(f)
-    stocks = set()
-    for board_name, board_list in data.items():
-        if isinstance(board_list, list):
-            for s in board_list:
-                if isinstance(s, str) and s:
-                    stocks.add(s)
-    return sorted(stocks)
+    codes = []
+    for board, lst in data.items():
+        if isinstance(lst, list):
+            codes.extend(lst)
+    return sorted(codes)
 
-STOCKS = load_stocks()
-print(f'已加载 {len(STOCKS)} 只股票')
+ALL_CODES = load_all_codes()
+print(f'已加载 {len(ALL_CODES)} 只股票代码')
 
-# Popular stocks with names (for search display)
-POPULAR = {
-    'sh600519': '贵州茅台', 'sz000858': '五粮液', 'sz300750': '宁德时代',
-    'sz002415': '海康威视', 'sz002475': '立讯精密', 'sz002049': '紫光国微',
-    'sh600276': '恒瑞医药', 'sh603259': '药明康德', 'sz300274': '阳光电源',
-    'sh601138': '工业富联', 'sh688981': '中芯国际', 'sz002371': '北方华创',
-    'sh688012': '中微公司', 'sh688008': '澜起科技', 'sh600584': '长电科技',
-    'sh688256': '寒武纪', 'sh603501': '豪威集团', 'sh688041': '海光信息',
-    'sh688235': '百济神州', 'sh688331': '荣昌生物', 'sz300124': '汇川技术',
-    'sh601689': '拓普集团', 'sh605117': '德业股份', 'sz300308': '中际旭创',
-    'sz300502': '新易盛', 'sz300394': '天孚通信', 'sz002463': '沪电股份',
-    'sh600346': '恒力石化', 'sh600096': '云天化', 'sh600887': '伊利股份',
-    'sh600900': '长江电力', 'sh601899': '紫金矿业', 'sh600809': '山西汾酒',
-    'sz002594': '比亚迪', 'sh601328': '交通银行', 'sh600036': '招商银行',
-    'sh601288': '农业银行', 'sh601398': '工商银行', 'sh601939': '建设银行',
-    'sh688266': '泽璟制药', 'sh600196': '复星医药', 'sh600570': '恒生电子',
-    'sz300782': '卓胜微', 'sh688525': '佰维存储', 'sh601601': '中国太保',
-    'sh600188': '兖矿能源', 'sh601088': '中国神华', 'sz002185': '华天科技',
-    'sz002156': '通富微电', 'sh600460': '士兰微', 'sz300024': '机器人',
-    'sh603160': '汇顶科技', 'sz300014': '亿纬锂能', 'sz002074': '国轩高科',
-    'sz300759': '康龙化成', 'sz300347': '泰格医药', 'sz002821': '凯莱英',
-    'sh688180': '君实生物', 'sz300558': '贝达药业', 'sz300474': '景嘉微',
-    'sh688036': '传音控股', 'sh603288': '海天味业', 'sh600598': '北大荒',
-    'sh601225': '陕西煤业', 'sh600988': '赤峰黄金', 'sh600025': '华能水电',
-    'sh600886': '国投电力', 'sh600566': '济川药业', 'sh600362': '江西铜业',
-    'sh601857': '中国石油', 'sh600028': '中国石化', 'sz000969': '安泰科技',
-    'sh600893': '航发动力', 'sh600745': '闻泰科技', 'sh600879': '航天电子',
-    'sh600592': '龙溪股份', 'sh688120': '华海清科', 'sh600551': '时代出版',
-    'sh600688': '上海石化', 'sh600579': '中化装备', 'sz300131': '英唐智控',
-}
-
-def get_stock_name(code):
-    """Get stock name, fetching from quote if not in popular list"""
-    if code in POPULAR:
-        return POPULAR[code]
-    # Try to fetch from quote
+def get_pinyin(name):
+    """拼音首字母 + 全拼 - 使用 pypinyin 库"""
     try:
-        import sys, os
-        sys.path.insert(0, str(SKILL_ROOT))
-        os.chdir(str(SKILL_ROOT))
-        from data import get_quote
-        q = get_quote(code)
-        name = q.name if hasattr(q, 'name') and q.name else ''
-        if name:
-            POPULAR[code] = name
-            return name
-    except:
-        pass
-    return ''
-
-def get_pinyin_initials(name):
-    """拼音首字母映射 - 完整覆盖A股常见字"""
-    pmap = {
-        '安':'A','百':'B','宝':'B','北':'B','贝':'B','比':'B','博':'B','邦':'B','保':'B','白':'B','波':'B','包':'B','本':'B',
-        '长':'C','传':'C','创':'C','春':'C','赤':'C','川':'C','晨':'C','成':'C','城':'C','程':'C','车':'C','材':'C','纯':'C','楚':'C','超':'C','慈':'C','磁':'C','崇':'C',
-        '大':'D','德':'D','电':'D','东':'D','动':'D','达':'D','迪':'D','地':'D','道':'D','鼎':'D','多':'D','岛':'D','第':'D','当':'D',
-        '恩':'E','二':'E','尔':'E','鹅':'E',
-        '方':'F','飞':'F','福':'F','复':'F','风':'F','富':'F','汾':'F','发':'F','丰':'F','房':'F','纺':'F','钒':'F','奉':'F',
-        '国':'G','高':'G','光':'G','广':'G','工':'G','歌':'G','港':'G','桂':'G','格':'G','冠':'G','钢':'G','谷':'G',
-        '华':'H','海':'H','恒':'H','航':'H','豪':'H','合':'H','寒':'H','宏':'H','汇':'H','湖':'H','化':'H','杭':'H','汉':'H','惠':'H','和':'H','瀚':'H','好':'H',
-        '金':'J','九':'J','景':'J','君':'J','江':'J','机':'J','京':'J','嘉':'J','均':'J','健':'J','洁':'J','巨':'J','建':'J','集':'J','吉':'J','加':'J','锦':'J','晶':'J','精':'J',
-        '凯':'K','科':'K','康':'K','口':'K','矿':'K','开':'K','客':'K','可':'K','坤':'K','克':'K',
-        '立':'L','联':'L','龙':'L','澜':'L','蓝':'L','绿':'L','力':'L','利':'L','路':'L','理':'L','良':'L','领':'L','旅':'L','凌':'L','鲁':'L','隆':'L','浪':'L','罗':'L','洛':'L',
-        '明':'M','民':'M','牧':'M','美':'M','茅':'M','迈':'M','名':'M','煤':'M','墨':'M','密':'M',
-        '能':'N','南':'N','宁':'N','农':'N','牛':'N','纳':'N','诺':'N',
-        '片':'P','平':'P','派':'P','浦':'P','鹏':'P','普':'P','品':'P',
-        '齐':'Q','青':'Q','千':'Q','旗':'Q','泉':'Q','启':'Q','奇':'Q','前':'Q','秦':'Q','强':'Q','全':'Q','潜':'Q',
-        '人':'R','日':'R','荣':'R','瑞':'R','润':'R','软':'R','燃':'R','融':'R','若':'R','锐':'R',
-        '三':'S','上':'S','生':'S','神':'S','水':'S','深':'S','赛':'S','时':'S','士':'S','数':'S','山':'S','盛':'S','石':'S','世':'S','首':'S','顺':'S','双':'S','苏':'S','四':'S','思':'S',
-        '天':'T','太':'T','通':'T','拓':'T','泰':'T','同':'T','特':'T','唐':'T','铁':'T','图':'T','钛':'T','腾':'T','桐':'T',
-        '万':'W','闻':'W','微':'W','文':'W','韦':'W','五':'W','维':'W','网':'W','物':'W','伟':'W','王':'W','卫':'W','旺':'W','威':'W',
-        '新':'X','信':'X','星':'X','先':'X','兴':'X','西':'X','小':'X','雄':'X','芯':'X','学':'X','现':'X','湘':'X','协':'X','雪':'X',
-        '阳':'Y','药':'Y','亿':'Y','用':'Y','云':'Y','医':'Y','永':'Y','一':'Y','有':'Y','银':'Y','兖':'Y','伊':'Y','洋':'Y','远':'Y','亚':'Y','烟':'Y','谊':'Y','源':'Y','鱼':'Y','盈':'Y','扬':'Y','友':'Y','易':'Y','悦':'Y','英':'Y','元':'Y','韵':'Y','应':'Y',
-        '中':'Z','紫':'Z','兆':'Z','卓':'Z','智':'Z','招':'Z','泽':'Z','证':'Z','重':'Z','张':'Z','浙':'Z','正':'Z','之':'Z','洲':'Z','志':'Z','展':'Z','珠':'Z','振':'Z','章':'Z','轴':'Z','臻':'Z',
-    }
-    return ''.join(pmap.get(c, c[0].upper()) for c in name)
+        from pypinyin import pinyin, Style
+        initials = ''.join(p[0][0].upper() for p in pinyin(name, style=Style.FIRST_LETTER))
+        full = ''.join(p[0] for p in pinyin(name, style=Style.NORMAL))
+        return initials, full
+    except ImportError:
+        initials = ''.join(c[0].upper() if '一' <= c <= '鿿' else c.upper() for c in name)
+        return initials, initials.lower()
 
 
 @app.route('/api/indices')
@@ -125,6 +67,28 @@ def indices():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/indices/trend')
+def indices_trend():
+    """Get recent K-line data for indices to draw mini trend charts"""
+    try:
+        import sys, os
+        sys.path.insert(0, str(SKILL_ROOT))
+        os.chdir(str(SKILL_ROOT))
+        from data import get_kline
+        codes = ['sh000001','sz399001','sz399006','sh000688','sh000300','sh000016']
+        result = {}
+        for c in codes:
+            try:
+                kline = get_kline(c, scale=240, datalen=20)
+                closes = [k.close for k in kline if hasattr(k, 'close')]
+                if closes:
+                    result[c] = closes
+            except: pass
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
@@ -142,9 +106,9 @@ def search():
     results = []
     if is_code_query:
         # Search full stock list by code
-        for code in STOCKS:
+        for code in ALL_CODES:
             code_short = code.replace('sh', '').replace('sz', '').replace('bj', '')
-            name = POPULAR.get(code, '')
+            name = STOCK_NAMES.get(code, '')
             score = 0
             if q == code: score = 100
             elif q == code_short: score = 95
@@ -152,20 +116,25 @@ def search():
             elif q in code_short: score = 70
             if score > 0:
                 results.append({'code': code, 'code_short': code_short,
-                    'name': name or code_short, 'pinyin': get_pinyin_initials(name) if name else '', 'score': score})
+                    'name': name or code_short, 'pinyin': get_pinyin(name)[0] if name else '', 'score': score})
     else:
-        # Search popular stocks by name / pinyin
-        for code, name in POPULAR.items():
+        # Search ALL 5300+ stocks by name / pinyin
+        q_lower = q.lower()
+        for code, name in STOCK_NAMES.items():
             code_short = code.replace('sh', '').replace('sz', '').replace('bj', '')
-            pinyin = get_pinyin_initials(name)
+            initials, full_py = get_pinyin(name)
             score = 0
             if q == name: score = 90
             elif q in name: score = 60
-            elif q == pinyin: score = 85
-            elif q in pinyin: score = 50
+            elif q_lower == initials.lower(): score = 88
+            elif q_lower == full_py: score = 86
+            elif full_py.startswith(q_lower): score = 75
+            elif initials.lower().startswith(q_lower): score = 72
+            elif q_lower in full_py: score = 55
+            elif q_lower in initials.lower(): score = 50
             if score > 0:
                 results.append({'code': code, 'code_short': code_short,
-                    'name': name, 'pinyin': pinyin, 'score': score})
+                    'name': name, 'pinyin': initials, 'score': score})
 
     results.sort(key=lambda x: x['score'], reverse=True)
     return jsonify(results[:8])
@@ -260,5 +229,208 @@ def analyze():
     return jsonify(result)
 
 
+import time as _time_mod
+
+# ── 理杏仁 PE/PB 分位点 ──────────────────────────────
+LIXINGER_TOKEN = os.environ.get("LIXINGER_TOKEN", "")
+LIXINGER_URL = "https://open.lixinger.com/api/cn/company/fundamental/non_financial"
+
+LIXINGER_METRICS = [
+    "pe_ttm", "pe_ttm.y5.cvpos", "pe_ttm.y10.cvpos",
+    "pb", "pb.y5.cvpos", "pb.y10.cvpos",
+    "dyr", "mc", "ey", "sp", "spc",
+]
+
+
+@app.route('/api/lixinger')
+def lixinger():
+    """Get PE/PB percentile data from 理杏仁 for a single stock"""
+    code = request.args.get('code', '')
+    if not code:
+        return jsonify({'error': '缺少股票代码'}), 400
+    if not LIXINGER_TOKEN:
+        return jsonify({'error': 'LIXINGER_TOKEN 未配置'}), 503
+
+    # Strip sh/sz prefix for 理杏仁
+    lx_code = code.replace('sh', '').replace('sz', '').replace('bj', '')
+
+    import requests as req_lx
+    from datetime import datetime as dt_lx, timedelta
+
+    data = None
+    for offset in [0, 1, 2]:
+        try_date = (dt_lx.now() - timedelta(days=offset)).strftime("%Y-%m-%d")
+        try:
+            resp = req_lx.post(
+                LIXINGER_URL,
+                json={
+                    "token": LIXINGER_TOKEN,
+                    "date": try_date,
+                    "stockCodes": [lx_code],
+                    "metricsList": LIXINGER_METRICS,
+                },
+                headers={"Content-Type": "application/json"},
+                timeout=15,
+            )
+            result = resp.json()
+            if result.get("code") == 1 and result.get("data"):
+                data = result["data"][0]
+                break
+        except Exception:
+            continue
+
+    if not data:
+        return jsonify({'error': '理杏仁无可用数据'}), 404
+
+    def pct_label(v):
+        """Convert 0-1 percentile to human label"""
+        if v is None: return '--'
+        pct = v * 100
+        if pct < 5: return f'{pct:.1f}% 极低'
+        if pct < 20: return f'{pct:.1f}% 偏低'
+        if pct < 50: return f'{pct:.1f}% 适中'
+        if pct < 80: return f'{pct:.1f}% 偏高'
+        return f'{pct:.1f}% 极高'
+
+    return jsonify({
+        'code': code,
+        'date': data.get('date', ''),
+        'pe_ttm': data.get('pe_ttm'),
+        'pe_pct5': data.get('pe_ttm.y5.cvpos'),
+        'pe_pct10': data.get('pe_ttm.y10.cvpos'),
+        'pe_pct5_label': pct_label(data.get('pe_ttm.y5.cvpos')),
+        'pe_pct10_label': pct_label(data.get('pe_ttm.y10.cvpos')),
+        'pb': data.get('pb'),
+        'pb_pct5': data.get('pb.y5.cvpos'),
+        'pb_pct10': data.get('pb.y10.cvpos'),
+        'pb_pct5_label': pct_label(data.get('pb.y5.cvpos')),
+        'pb_pct10_label': pct_label(data.get('pb.y10.cvpos')),
+        'dyr': data.get('dyr'),
+        'ey': data.get('ey'),
+        'mc': data.get('mc'),
+    })
+
+
+# ETF-based sector proxies (using real ETF data via skill — always works)
+SECTOR_ETFS = {
+    '半导体': 'sh512480', '新能源车': 'sh515030', '银行': 'sh512800',
+    '白酒': 'sh512690', '光伏': 'sh515790', '军工': 'sh512660',
+    '医药': 'sh512010', '证券': 'sh512880', '科创50': 'sh588000',
+    '人工智能': 'sh515070', '芯片': 'sh512760', '消费电子': 'sh159732',
+    '电力': 'sh159611', '煤炭': 'sh515220', '稀土': 'sh516780',
+    '通信': 'sh515880', '计算机': 'sh512720', '传媒': 'sh512980',
+    '汽车': 'sh516110', '房地产': 'sh512200', '钢铁': 'sh515210',
+    '有色': 'sh512400', '化工': 'sh516020', '农业': 'sh159865',
+    '家电': 'sh159996', '建材': 'sh516750', '旅游': 'sh159766',
+    '中药': 'sh159647', '中证500': 'sh510500', '创业板': 'sh159915',
+    '红利': 'sh510880', '纳指': 'sh513100', '黄金': 'sh518880',
+    '港股通': 'sh513090', '沪深300': 'sh510300',
+}
+
+_sector_cache = {'data': None, 'time': 0}
+
+@app.route('/api/sectors')
+def sectors():
+    """Get sector/ETF performance ranking using skill's data fetchers"""
+    if _sector_cache['data'] is not None and _time_mod.time() - _sector_cache['time'] < 180:
+        return jsonify(_sector_cache['data'])
+
+    try:
+        sys.path.insert(0, str(SKILL_ROOT))
+        os.chdir(str(SKILL_ROOT))
+        from data import get_quotes, get_kline
+
+        # Fetch all quotes in parallel (skill supports batch fetching)
+        codes = list(SECTOR_ETFS.values())
+        names = list(SECTOR_ETFS.keys())
+        quotes = get_quotes(codes, use_cache=False)
+
+        result = []
+        for i, (name, code) in enumerate(zip(names, codes)):
+            sector = {'code': code, 'name': name, 'price': 0, 'change_pct': 0, 'trend': []}
+            q = quotes[i] if i < len(quotes) else None
+            if q and q.price > 0:
+                sector['price'] = q.price
+                if hasattr(q, 'change_pct') and q.change_pct:
+                    sector['change_pct'] = q.change_pct
+                elif hasattr(q, 'prev_close') and q.prev_close and q.prev_close > 0:
+                    sector['change_pct'] = round((q.price - q.prev_close) / q.prev_close * 100, 2)
+            result.append(sector)
+
+        result.sort(key=lambda x: x['change_pct'], reverse=True)
+        result = [s for s in result if s['price'] > 0]
+        _sector_cache['data'] = result
+        _sector_cache['time'] = _time_mod.time()
+
+        # Fetch K-lines in background (won't block response)
+        def _fetch_trends():
+            for i, (name, code) in enumerate(zip(names, codes)):
+                if i < len(result) and result[i]['price'] > 0:
+                    try:
+                        kline = get_kline(code, scale=101, datalen=12)
+                        if kline:
+                            closes = [k.close for k in kline if hasattr(k, 'close') and k.close > 0]
+                            if closes:
+                                result[i]['trend'] = closes
+                    except:
+                        pass
+            _sector_cache['data'] = result  # update cache with trends
+            _sector_cache['time'] = _time_mod.time()
+
+        import threading
+        threading.Thread(target=_fetch_trends, daemon=True).start()
+
+        return jsonify(result)
+    except Exception as e:
+        if _sector_cache['data'] is not None:
+            return jsonify(_sector_cache['data'])
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/watchlist')
+def watchlist():
+    """Get quote + mini trend for a list of stock codes"""
+    codes = request.args.get('codes', '')
+    if not codes:
+        return jsonify({})
+    code_list = [c.strip() for c in codes.split(',') if c.strip()]
+    if not code_list:
+        return jsonify({})
+
+    result = {}
+    try:
+        import sys, os
+        sys.path.insert(0, str(SKILL_ROOT))
+        os.chdir(str(SKILL_ROOT))
+        from data import get_quote, get_kline
+
+        for code in code_list:
+            item = {'code': code}
+            try:
+                q = get_quote(code)
+                item['name'] = q.name if hasattr(q, 'name') else ''
+                item['price'] = q.price if hasattr(q, 'price') else 0
+                item['change_pct'] = q.change_pct if hasattr(q, 'change_pct') else 0
+            except:
+                item['price'] = 0
+                item['change_pct'] = 0
+
+            try:
+                kline = get_kline(code, scale=240, datalen=20)
+                closes = [k.close for k in kline if hasattr(k, 'close')]
+                if closes:
+                    item['trend'] = closes
+            except:
+                item['trend'] = []
+
+            result[code] = item
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify(result)
+
+
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=8820, debug=False)
+    port = int(os.environ.get('PORT', 8820))
+    host = os.environ.get('HOST', '127.0.0.1')
+    app.run(host=host, port=port, debug=False)
